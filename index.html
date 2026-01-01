@@ -37,6 +37,21 @@
             font-size: 28px;
         }
 
+        .sync-status {
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .sync-status.synced {
+            color: #28a745;
+        }
+
+        .sync-status.syncing {
+            color: #667eea;
+        }
+
         .input-container {
             display: flex;
             gap: 10px;
@@ -76,6 +91,12 @@
 
         #addButton:active {
             transform: translateY(0);
+        }
+
+        #addButton:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
         }
 
         .shopping-list {
@@ -168,11 +189,18 @@
         .clear-all:hover {
             background: #dee2e6;
         }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🛒 쇼핑 리스트</h1>
+        <div class="sync-status" id="syncStatus">☁️ Supabase 연결 중...</div>
 
         <div class="input-container">
             <input
@@ -184,25 +212,37 @@
             <button id="addButton">추가</button>
         </div>
 
-        <ul class="shopping-list" id="shoppingList"></ul>
+        <ul class="shopping-list" id="shoppingList">
+            <div class="loading">데이터를 불러오는 중...</div>
+        </ul>
 
         <div class="stats" id="stats"></div>
 
         <button class="clear-all" id="clearAll">완료된 항목 삭제</button>
     </div>
 
+    <!-- Supabase JavaScript Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <script>
-        // 로컬 스토리지에서 데이터 로드
-        let shoppingItems = JSON.parse(localStorage.getItem('shoppingList')) || [];
+        // Supabase 초기화
+        const SUPABASE_URL = 'https://wqhjkevxvczcpnnfgkin.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_-fGbZQQG4bTlVwRGZk6Olg_ALZgRMV8';
+
+        const { createClient } = supabase;
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let shoppingItems = [];
 
         const itemInput = document.getElementById('itemInput');
         const addButton = document.getElementById('addButton');
         const shoppingList = document.getElementById('shoppingList');
         const statsDiv = document.getElementById('stats');
         const clearAllButton = document.getElementById('clearAll');
+        const syncStatus = document.getElementById('syncStatus');
 
-        // 초기 렌더링
-        renderList();
+        // 초기 로드
+        loadItems();
 
         // 아이템 추가
         addButton.addEventListener('click', addItem);
@@ -212,7 +252,30 @@
             }
         });
 
-        function addItem() {
+        // Supabase에서 아이템 로드
+        async function loadItems() {
+            try {
+                updateSyncStatus('syncing', '데이터 로딩 중...');
+
+                const { data, error } = await supabaseClient
+                    .from('shopping_items')
+                    .select('*')
+                    .order('created_at', { ascending: true });
+
+                if (error) throw error;
+
+                shoppingItems = data || [];
+                renderList();
+                updateSyncStatus('synced', '✓ 동기화 완료');
+            } catch (error) {
+                console.error('Error loading items:', error);
+                updateSyncStatus('error', '❌ 로딩 실패');
+                shoppingList.innerHTML = '<div class="empty-message">데이터를 불러올 수 없습니다.</div>';
+            }
+        }
+
+        // 아이템 추가
+        async function addItem() {
             const itemText = itemInput.value.trim();
 
             if (itemText === '') {
@@ -220,18 +283,33 @@
                 return;
             }
 
-            const newItem = {
-                id: Date.now(),
-                text: itemText,
-                checked: false
-            };
+            try {
+                addButton.disabled = true;
+                updateSyncStatus('syncing', '저장 중...');
 
-            shoppingItems.push(newItem);
-            saveToLocalStorage();
-            renderList();
+                const { data, error } = await supabaseClient
+                    .from('shopping_items')
+                    .insert([
+                        {
+                            text: itemText,
+                            checked: false,
+                            user_id: 'default'
+                        }
+                    ])
+                    .select();
 
-            itemInput.value = '';
-            itemInput.focus();
+                if (error) throw error;
+
+                itemInput.value = '';
+                itemInput.focus();
+                await loadItems();
+            } catch (error) {
+                console.error('Error adding item:', error);
+                updateSyncStatus('error', '❌ 추가 실패');
+                alert('아이템 추가에 실패했습니다.');
+            } finally {
+                addButton.disabled = false;
+            }
         }
 
         // 리스트 렌더링
@@ -253,10 +331,10 @@
                         type="checkbox"
                         class="checkbox"
                         ${item.checked ? 'checked' : ''}
-                        onchange="toggleCheck(${item.id})"
+                        onchange="toggleCheck('${item.id}')"
                     >
-                    <span class="item-text">${item.text}</span>
-                    <button class="delete-button" onclick="deleteItem(${item.id})">삭제</button>
+                    <span class="item-text">${escapeHtml(item.text)}</span>
+                    <button class="delete-button" onclick="deleteItem('${item.id}')">삭제</button>
                 `;
 
                 shoppingList.appendChild(li);
@@ -266,34 +344,73 @@
         }
 
         // 체크 토글
-        function toggleCheck(id) {
-            const item = shoppingItems.find(item => item.id === id);
-            if (item) {
-                item.checked = !item.checked;
-                saveToLocalStorage();
-                renderList();
+        async function toggleCheck(id) {
+            try {
+                updateSyncStatus('syncing', '업데이트 중...');
+
+                const item = shoppingItems.find(item => item.id === id);
+                if (!item) return;
+
+                const { error } = await supabaseClient
+                    .from('shopping_items')
+                    .update({ checked: !item.checked })
+                    .eq('id', id);
+
+                if (error) throw error;
+
+                await loadItems();
+            } catch (error) {
+                console.error('Error toggling item:', error);
+                updateSyncStatus('error', '❌ 업데이트 실패');
             }
         }
 
         // 아이템 삭제
-        function deleteItem(id) {
-            shoppingItems = shoppingItems.filter(item => item.id !== id);
-            saveToLocalStorage();
-            renderList();
+        async function deleteItem(id) {
+            try {
+                updateSyncStatus('syncing', '삭제 중...');
+
+                const { error } = await supabaseClient
+                    .from('shopping_items')
+                    .delete()
+                    .eq('id', id);
+
+                if (error) throw error;
+
+                await loadItems();
+            } catch (error) {
+                console.error('Error deleting item:', error);
+                updateSyncStatus('error', '❌ 삭제 실패');
+            }
         }
 
         // 완료된 항목 일괄 삭제
-        clearAllButton.addEventListener('click', () => {
-            const checkedCount = shoppingItems.filter(item => item.checked).length;
+        clearAllButton.addEventListener('click', async () => {
+            const checkedItems = shoppingItems.filter(item => item.checked);
+            const checkedCount = checkedItems.length;
 
             if (checkedCount === 0) {
                 return;
             }
 
             if (confirm(`완료된 ${checkedCount}개의 항목을 삭제하시겠습니까?`)) {
-                shoppingItems = shoppingItems.filter(item => !item.checked);
-                saveToLocalStorage();
-                renderList();
+                try {
+                    updateSyncStatus('syncing', '삭제 중...');
+
+                    const checkedIds = checkedItems.map(item => item.id);
+
+                    const { error } = await supabaseClient
+                        .from('shopping_items')
+                        .delete()
+                        .in('id', checkedIds);
+
+                    if (error) throw error;
+
+                    await loadItems();
+                } catch (error) {
+                    console.error('Error clearing items:', error);
+                    updateSyncStatus('error', '❌ 삭제 실패');
+                }
             }
         });
 
@@ -314,14 +431,35 @@
             }
         }
 
-        // 로컬 스토리지에 저장
-        function saveToLocalStorage() {
-            localStorage.setItem('shoppingList', JSON.stringify(shoppingItems));
+        // 동기화 상태 업데이트
+        function updateSyncStatus(status, message) {
+            syncStatus.className = `sync-status ${status}`;
+            syncStatus.textContent = message;
+        }
+
+        // XSS 방지를 위한 HTML 이스케이프
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         // 전역 함수로 노출 (inline onclick에서 사용)
         window.toggleCheck = toggleCheck;
         window.deleteItem = deleteItem;
+
+        // 실시간 동기화 (선택적)
+        // Supabase Realtime으로 다른 사용자의 변경사항을 실시간으로 받을 수 있습니다
+        const channel = supabaseClient
+            .channel('shopping_items_changes')
+            .on('postgres_changes',
+                { event: '*', schema: 'public', table: 'shopping_items' },
+                (payload) => {
+                    console.log('Real-time update:', payload);
+                    loadItems();
+                }
+            )
+            .subscribe();
     </script>
 </body>
 </html>

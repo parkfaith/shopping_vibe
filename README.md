@@ -9,8 +9,10 @@
 - ✅ 개별 아이템 삭제
 - ✅ 완료된 항목 일괄 삭제
 - ✅ 실시간 통계 (전체/완료/남은 항목)
-- ✅ localStorage를 통한 데이터 영구 저장
+- ✅ **Supabase 데이터베이스 연동** (클라우드 저장)
+- ✅ **실시간 동기화** (여러 기기에서 동시 사용 가능)
 - ✅ 반응형 디자인
+- ✅ XSS 보안 처리
 
 ## 🚀 사용 방법
 
@@ -26,9 +28,19 @@
 
 https://parkfaith.github.io/shopping_vibe/
 
-### 추가 설정 필요 없음
+### Supabase 데이터베이스 연동
 
-이 앱은 순수 HTML, CSS, JavaScript로 만들어져 별도의 설치나 서버가 필요하지 않습니다.
+이 앱은 Supabase를 사용하여 클라우드에 데이터를 저장합니다.
+
+**데이터베이스 설정 (이미 완료됨):**
+1. Supabase 프로젝트 생성
+2. `supabase-setup.sql` 파일의 SQL을 실행하여 `shopping_items` 테이블 생성
+3. Supabase URL과 Anon Key가 이미 앱에 설정되어 있음
+
+**장점:**
+- ☁️ 클라우드 저장으로 여러 기기에서 동일한 데이터 접근
+- 🔄 실시간 동기화로 변경사항이 즉시 반영
+- 🔒 Row Level Security로 보안 강화
 
 ## 🧪 테스트
 
@@ -61,6 +73,7 @@ npm test
 ```
 shopping_vibe/
 ├── index.html               # 메인 애플리케이션
+├── supabase-setup.sql       # Supabase 테이블 생성 SQL
 ├── shopping-list.test.js    # Playwright 테스트
 ├── playwright.config.js     # Playwright 설정
 ├── package.json             # 프로젝트 설정
@@ -71,8 +84,9 @@ shopping_vibe/
 
 - HTML5
 - CSS3 (Flexbox, Gradient)
-- Vanilla JavaScript (ES6+)
-- localStorage API
+- Vanilla JavaScript (ES6+, Async/Await)
+- **Supabase** (PostgreSQL 데이터베이스)
+- **Supabase Realtime** (실시간 동기화)
 - Playwright (테스트)
 
 ## 🎨 특징
