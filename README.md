@@ -16,11 +16,15 @@
 
 ### 바로 실행하기
 
-1. `shopping-list.html` 파일을 브라우저로 엽니다.
+1. `index.html` 파일을 브라우저로 엽니다.
 2. 또는 터미널에서:
    ```bash
-   start shopping-list.html
+   start index.html
    ```
+
+### GitHub Pages로 바로 보기
+
+https://parkfaith.github.io/shopping_vibe/
 
 ### 추가 설정 필요 없음
 
@@ -55,8 +59,8 @@ npm test
 ## 📁 프로젝트 구조
 
 ```
-shopping-list-app/
-├── shopping-list.html       # 메인 애플리케이션
+shopping_vibe/
+├── index.html               # 메인 애플리케이션
 ├── shopping-list.test.js    # Playwright 테스트
 ├── playwright.config.js     # Playwright 설정
 ├── package.json             # 프로젝트 설정

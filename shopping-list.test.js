@@ -3,7 +3,7 @@ const path = require('path');
 
 // 테스트 전에 localStorage를 클리어
 test.beforeEach(async ({ page }) => {
-  const filePath = 'file://' + path.resolve(__dirname, 'shopping-list.html');
+  const filePath = 'file://' + path.resolve(__dirname, 'index.html');
   await page.goto(filePath);
   await page.evaluate(() => localStorage.clear());
   await page.reload();
